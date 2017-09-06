@@ -19,7 +19,7 @@ parser.add_argument('--resize_scale', type=int, default=286, help='resize scale 
 parser.add_argument('--crop_size', type=int, default=256, help='crop size (0 is false)')
 parser.add_argument('--fliplr', type=bool, default=True, help='random fliplr True of False')
 parser.add_argument('--num_epochs', type=int, default=200, help='number of train epochs')
-parser.add_argument('--decay_epoch', type=int, default=200, help='start decaying learning rate after this number')
+parser.add_argument('--decay_epoch', type=int, default=100, help='start decaying learning rate after this number')
 parser.add_argument('--lrG', type=float, default=0.0002, help='learning rate for generator, default=0.0002')
 parser.add_argument('--lrD', type=float, default=0.0002, help='learning rate for discriminator, default=0.0002')
 parser.add_argument('--lambdaA', type=float, default=10, help='lambdaA for cycle loss')
@@ -46,12 +46,12 @@ transform = transforms.Compose([transforms.Scale(params.input_size),
 
 # Train data
 train_data_A = DatasetFromFolder(data_dir, subfolder='trainA', transform=transform,
-                               resize_scale=params.resize_scale, crop_size=params.crop_size, fliplr=params.fliplr)
+                                 resize_scale=params.resize_scale, crop_size=params.crop_size, fliplr=params.fliplr)
 train_data_loader_A = torch.utils.data.DataLoader(dataset=train_data_A,
                                                   batch_size=params.batch_size,
                                                   shuffle=True)
 train_data_B = DatasetFromFolder(data_dir, subfolder='trainB', transform=transform,
-                               resize_scale=params.resize_scale, crop_size=params.crop_size, fliplr=params.fliplr)
+                                 resize_scale=params.resize_scale, crop_size=params.crop_size, fliplr=params.fliplr)
 train_data_loader_B = torch.utils.data.DataLoader(dataset=train_data_B,
                                                   batch_size=params.batch_size,
                                                   shuffle=True)
@@ -133,6 +133,12 @@ G_A_avg_losses = []
 G_B_avg_losses = []
 cycle_A_avg_losses = []
 cycle_B_avg_losses = []
+
+# Generated image pool
+num_pool = 50
+fakeA_pool = utils.ImagePool(num_pool)
+fakeB_pool = utils.ImagePool(num_pool)
+
 step = 0
 for epoch in range(params.num_epochs):
     D_A_losses = []
@@ -183,6 +189,7 @@ for epoch in range(params.num_epochs):
         # Train discriminator D_A
         D_A_real_decision = D_A(realA)
         D_A_real_loss = MSE_loss(D_A_real_decision, Variable(torch.ones(D_A_real_decision.size()).cuda()))
+        fakeA = fakeA_pool.query(fakeA)
         D_A_fake_decision = D_A(fakeA)
         D_A_fake_loss = MSE_loss(D_A_fake_decision, Variable(torch.zeros(D_A_fake_decision.size()).cuda()))
 
@@ -195,6 +202,7 @@ for epoch in range(params.num_epochs):
         # Train discriminator D_B
         D_B_real_decision = D_B(realB)
         D_B_real_loss = MSE_loss(D_B_real_decision, Variable(torch.ones(D_B_real_decision.size()).cuda()))
+        fakeB = fakeB_pool.query(fakeB)
         D_B_fake_decision = D_B(fakeB)
         D_B_fake_loss = MSE_loss(D_B_fake_decision, Variable(torch.zeros(D_B_fake_decision.size()).cuda()))
 
@@ -252,14 +260,16 @@ for epoch in range(params.num_epochs):
 
     # log the images
     info = {
-        'real_image': utils.to_np(test_real_A.view(-1, params.input_size, params.input_size)),
-        'gen_image': test_fake_B.view(-1, params.input_size, params.input_size),
-        'recon_image': test_recon_A.view(-1, params.input_size, params.input_size)
+        'real_A_image': utils.to_np(test_real_A.view(-1, params.input_size, params.input_size)),
+        'gen_B_image': test_fake_B.view(-1, params.input_size, params.input_size),
+        'recon_A_image': test_recon_A.view(-1, params.input_size, params.input_size),
+        'real_B_image': utils.to_np(test_real_B.view(-1, params.input_size, params.input_size)),
+        'gen_A_image': test_fake_A.view(-1, params.input_size, params.input_size),
+        'recon_B_image': test_recon_B.view(-1, params.input_size, params.input_size)
     }
 
     for tag, images in info.items():
         img_logger.image_summary(tag, images, epoch + 1)
-
 
 
 # Plot average losses
