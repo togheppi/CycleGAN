@@ -18,7 +18,7 @@ class DatasetFromFolder(data.Dataset):
     def __getitem__(self, index):
         # Load Image
         img_fn = os.path.join(self.input_path, self.image_filenames[index])
-        img = Image.open(img_fn)
+        img = Image.open(img_fn).convert('RGB')
 
         # preprocessing
         if self.resize_scale:

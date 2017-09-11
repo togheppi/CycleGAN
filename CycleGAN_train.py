@@ -7,11 +7,12 @@ import utils
 import argparse
 import os, itertools
 from logger import Logger
+import numpy as np
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', required=False, default='apple2orange', help='input dataset')
+parser.add_argument('--dataset', required=False, default='horse2zebra', help='input dataset')
 parser.add_argument('--batch_size', type=int, default=1, help='train batch size')
-parser.add_argument('--ngf', type=int, default=64)
+parser.add_argument('--ngf', type=int, default=32)
 parser.add_argument('--ndf', type=int, default=64)
 parser.add_argument('--num_resnet', type=int, default=6, help='number of resnet blocks in generator')
 parser.add_argument('--input_size', type=int, default=256, help='input size')
@@ -65,12 +66,14 @@ test_data_B = DatasetFromFolder(data_dir, subfolder='testB', transform=transform
 test_data_loader_B = torch.utils.data.DataLoader(dataset=test_data_B,
                                                  batch_size=params.batch_size,
                                                  shuffle=False)
-test_real_A = test_data_loader_A.__iter__().__next__()
-test_real_B = test_data_loader_B.__iter__().__next__()
+
+# Get specific test images
+test_real_A_data = test_data_A.__getitem__(11).unsqueeze(0)  # Convert to 4d tensor (BxNxHxW)
+test_real_B_data = test_data_B.__getitem__(91).unsqueeze(0)
 
 # Models
-G_A = Generator(3, params.ngf, 3, 6)
-G_B = Generator(3, params.ngf, 3, 6)
+G_A = Generator(3, params.ngf, 3, params.num_resnet)
+G_B = Generator(3, params.ngf, 3, params.num_resnet)
 D_A = Discriminator(3, params.ndf, 1)
 D_B = Discriminator(3, params.ndf, 1)
 G_A.normal_weight_init(mean=0.0, std=0.02)
@@ -136,8 +139,8 @@ cycle_B_avg_losses = []
 
 # Generated image pool
 num_pool = 50
-fakeA_pool = utils.ImagePool(num_pool)
-fakeB_pool = utils.ImagePool(num_pool)
+fake_A_pool = utils.ImagePool(num_pool)
+fake_B_pool = utils.ImagePool(num_pool)
 
 step = 0
 for epoch in range(params.num_epochs):
@@ -155,30 +158,30 @@ for epoch in range(params.num_epochs):
         G_optimizer.param_groups[0]['lr'] -= params.lrG / (params.num_epochs - params.decay_epoch)
 
     # training
-    for i, (realA, realB) in enumerate(zip(train_data_loader_A, train_data_loader_B)):
+    for i, (real_A, real_B) in enumerate(zip(train_data_loader_A, train_data_loader_B)):
 
-        # input & target image data
-        realA = Variable(realA.cuda())
-        realB = Variable(realB.cuda())
+        # input image data
+        real_A = Variable(real_A.cuda())
+        real_B = Variable(real_B.cuda())
 
         # Train generator G
         # A -> B
-        fakeB = G_A(realA)
-        D_B_fake_decision = D_B(fakeB)
+        fake_B = G_A(real_A)
+        D_B_fake_decision = D_B(fake_B)
         G_A_loss = MSE_loss(D_B_fake_decision, Variable(torch.ones(D_B_fake_decision.size()).cuda()))
 
         # forward cycle loss
-        reconA = G_B(fakeB)
-        cycle_A_loss = L1_loss(reconA, realA) * params.lambdaA
+        recon_A = G_B(fake_B)
+        cycle_A_loss = L1_loss(recon_A, real_A) * params.lambdaA
 
         # B -> A
-        fakeA = G_B(realB)
-        D_A_fake_decision = D_A(fakeA)
+        fake_A = G_B(real_B)
+        D_A_fake_decision = D_A(fake_A)
         G_B_loss = MSE_loss(D_A_fake_decision, Variable(torch.ones(D_A_fake_decision.size()).cuda()))
 
         # backward cycle loss
-        reconB = G_A(fakeA)
-        cycle_B_loss = L1_loss(reconB, realB) * params.lambdaB
+        recon_B = G_A(fake_A)
+        cycle_B_loss = L1_loss(recon_B, real_B) * params.lambdaB
 
         # Back propagation
         G_loss = G_A_loss + G_B_loss + cycle_A_loss + cycle_B_loss
@@ -187,10 +190,10 @@ for epoch in range(params.num_epochs):
         G_optimizer.step()
 
         # Train discriminator D_A
-        D_A_real_decision = D_A(realA)
+        D_A_real_decision = D_A(real_A)
         D_A_real_loss = MSE_loss(D_A_real_decision, Variable(torch.ones(D_A_real_decision.size()).cuda()))
-        fakeA = fakeA_pool.query(fakeA)
-        D_A_fake_decision = D_A(fakeA)
+        fake_A = fake_A_pool.query(fake_A)
+        D_A_fake_decision = D_A(fake_A)
         D_A_fake_loss = MSE_loss(D_A_fake_decision, Variable(torch.zeros(D_A_fake_decision.size()).cuda()))
 
         # Back propagation
@@ -200,10 +203,10 @@ for epoch in range(params.num_epochs):
         D_A_optimizer.step()
 
         # Train discriminator D_B
-        D_B_real_decision = D_B(realB)
+        D_B_real_decision = D_B(real_B)
         D_B_real_loss = MSE_loss(D_B_real_decision, Variable(torch.ones(D_B_real_decision.size()).cuda()))
-        fakeB = fakeB_pool.query(fakeB)
-        D_B_fake_decision = D_B(fakeB)
+        fake_B = fake_B_pool.query(fake_B)
+        D_B_fake_decision = D_B(fake_B)
         D_B_fake_loss = MSE_loss(D_B_fake_decision, Variable(torch.zeros(D_B_fake_decision.size()).cuda()))
 
         # Back propagation
@@ -248,24 +251,24 @@ for epoch in range(params.num_epochs):
     cycle_B_avg_losses.append(cycle_B_avg_loss)
 
     # Show result for test image
-    test_real_A = Variable(test_real_A.cuda())
+    test_real_A = Variable(test_real_A_data.cuda())
     test_fake_B = G_A(test_real_A)
     test_recon_A = G_B(test_fake_B)
-    utils.plot_test_result(test_real_A, test_fake_B, test_recon_A, epoch, save=True, save_dir=save_dir + 'AtoB')
 
-    test_real_B = Variable(test_real_B.cuda())
+    test_real_B = Variable(test_real_B_data.cuda())
     test_fake_A = G_B(test_real_B)
     test_recon_B = G_A(test_fake_A)
-    utils.plot_test_result(test_real_B, test_fake_A, test_recon_B, epoch, save=True, save_dir=save_dir + 'BtoA')
+
+    utils.plot_train_result([test_real_A, test_real_B], [test_fake_B, test_fake_A], [test_recon_A, test_recon_B],
+                            epoch, save=True, save_dir=save_dir)
 
     # log the images
+    result_AtoB = np.concatenate((utils.to_np(test_real_A), utils.to_np(test_fake_B), utils.to_np(test_recon_A)), axis=3)
+    result_BtoA = np.concatenate((utils.to_np(test_real_B), utils.to_np(test_fake_A), utils.to_np(test_recon_B)), axis=3)
+
     info = {
-        'real_A_image': utils.to_np(test_real_A.view(-1, params.input_size, params.input_size)),
-        'gen_B_image': test_fake_B.view(-1, params.input_size, params.input_size),
-        'recon_A_image': test_recon_A.view(-1, params.input_size, params.input_size),
-        'real_B_image': utils.to_np(test_real_B.view(-1, params.input_size, params.input_size)),
-        'gen_A_image': test_fake_A.view(-1, params.input_size, params.input_size),
-        'recon_B_image': test_recon_B.view(-1, params.input_size, params.input_size)
+        'result_AtoB': result_AtoB.transpose(0, 2, 3, 1),  # convert to BxHxWxC
+        'result_BtoA': result_BtoA.transpose(0, 2, 3, 1)
     }
 
     for tag, images in info.items():
@@ -284,7 +287,6 @@ utils.plot_loss(avg_losses, params.num_epochs, save=True, save_dir=save_dir)
 
 # Make gif
 utils.make_gif(params.dataset, params.num_epochs, save_dir=save_dir)
-
 # Save trained parameters of model
 torch.save(G_A.state_dict(), model_dir + 'generator_A_param.pkl')
 torch.save(G_B.state_dict(), model_dir + 'generator_B_param.pkl')
