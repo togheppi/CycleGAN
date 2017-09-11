@@ -55,7 +55,6 @@ GAN losses<br> ( ![FF8900](https://placehold.it/10/FF8900/000000?text=+) : Discr
     |![](apple2orange_test_results/AtoB/Test_result_176.png)|
     |![](apple2orange_test_results/AtoB/Test_result_250.png)|
     |Orange to Apple<br>1st column: Input / 2nd column: Generated / 3rd column: Reconstructed|
-    |:---:|
     |![](apple2orange_test_results/BtoA/Test_result_109.png)|
     |![](apple2orange_test_results/BtoA/Test_result_128.png)|
     |![](apple2orange_test_results/BtoA/Test_result_142.png)|
