@@ -62,7 +62,6 @@ GAN losses<br> ( ![FF8900](https://placehold.it/10/FF8900/000000?text=+) : Discr
     |![](apple2orange_test_results/BtoA/Test_result_221.png)|
 
 ### References
-1. https://github.com/mrzhu-cool/CycleGAN-pytorch
-2. https://github.com/junyanz/pytorch-CycleGAN-and-CycleGAN
-3. https://github.com/znxlwm/pytorch-CycleGAN
-4. https://affinelayer.com/CycleGAN/
+1. https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix
+2. https://github.com/znxlwm/pytorch-CycleGAN
+3. https://hardikbansal.github.io/CycleGANBlog
